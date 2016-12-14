@@ -4,9 +4,8 @@ use mio::tcp::{TcpListener, TcpStream};
 use std::io::Read;
 use std::process::{Child, Command};
 
-const SERVER: Token = mio::Token(0);
-const A1: Token = mio::Token(0);
-const A2: Token = mio::Token(1);
+const CLIENT: Token = mio::Token(0);
+const SERVER: Token = mio::Token(1);
 
 struct Agent {
     name : String,
@@ -63,18 +62,25 @@ impl Agent {
     }
 }
 
-fn copy_data(from: &Agent, to: &Agent) {
-    let mut buf = [u8; 1024];
-    let size = from.socket.read(buf);
+fn copy_data(from: &mut Agent, to: &mut Agent) {
+    let mut buf: [u8; 1024] = [0; 1024];
+    let mut b = &mut buf[..];
+    let size = from.socket.read(b);
+    println!("Buf {} ",size.unwrap());
+
+    for x in b.iter() {
+        print!("{} ", x);
+    }    
+    panic!();
 }
 
-fn shuttle(agents: Vec<Agent>) {
+fn shuttle(client: &mut Agent, server: &mut Agent) {
     // Listen for connect
     // Create an poll instance
     let poll = Poll::new().unwrap();        
-    poll.register(&agents[0].socket, A1, Ready::readable(),
+    poll.register(&client.socket, CLIENT, Ready::readable(),
                   PollOpt::level()).unwrap();
-    poll.register(&agents[1].socket, A1, Ready::readable(),
+    poll.register(&server.socket, SERVER, Ready::readable(),
                   PollOpt::level()).unwrap();
     let mut events = Events::with_capacity(1024);
 
@@ -82,11 +88,13 @@ fn shuttle(agents: Vec<Agent>) {
     loop {
         for event in events.iter() {
             match event.token() {
-                A1 => {
-                    println!("A0 ready");
+                CLIENT => {
+                    println!("Client ready");
+                    copy_data(client, server);
                 },
-                A2 => {
-                    println!("A1 ready");
+                SERVER => {
+                    println!("Server ready");
+                    copy_data(server, client);                    
                 },
                 _ => unreachable!()
             }
@@ -95,22 +103,16 @@ fn shuttle(agents: Vec<Agent>) {
 }
 
 fn main() {
-    let mut agents: Vec<Agent> = Vec::new();
-    
-    let a1 = Agent::new(String::from("a1"),
+    let mut server = Agent::new(String::from("server"),
                             String::from("/Users/ekr/dev/boringssl//build/ssl/test/bssl_shim"),
-                            Vec::new());
-    agents.push(a1.unwrap());
-    
-    let a2 = Agent::new(String::from("a2"),
+                            Vec::new()).unwrap();
+    let mut client = Agent::new(String::from("client"),
                             String::from("/Users/ekr/dev/boringssl//build/ssl/test/bssl_shim"),
                             vec![String::from("-server"),
                                  String::from("-key-file"),
                                  String::from("/Users/ekr/dev/boringssl/ssl/test/runner/server.pem"),
                                  String::from("-cert-file"),
                                  String::from("/Users/ekr/dev/boringssl/ssl/test/runner/server.pem")]
-    );
-    agents.push(a2.unwrap());    
-
-    shuttle(agents);
+    ).unwrap();
+    shuttle(&mut client, &mut server);
 }
