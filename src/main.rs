@@ -186,7 +186,7 @@ fn run_test_case(config: &TestConfig, case: &TestCase) -> bool{
     shuttle(&mut client, &mut server);
 
     if !(client.check_status() && server.check_status()) {
-        info!("FAILED: {}", case.name);
+        info!("FAILED: {}", case.name);        
         return false;
     }
     true
@@ -206,8 +206,19 @@ fn main() {
     f.read_to_string(&mut s).expect("Could not read file to string");
     let cases : TestCases = json::decode(&s).unwrap();
 
-    for c in cases.cases {
-        run_test_case(&config, &c);
-    }
+    let mut ran = 0;
+    let mut succeeded = 0;
+    let mut failed = 0;
     
+    for c in cases.cases {
+        ran += 1;
+        if run_test_case(&config, &c) {
+            succeeded += 1;
+        } else {
+            failed += 1;
+        }
+    }
+
+    println!("Tests {}; Succeeded {}; Failed {}",
+             ran, succeeded, failed);
 }
