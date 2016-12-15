@@ -194,5 +194,10 @@ fn main() {
     let mut f = File::open("cases.json").unwrap();
     let mut s = String::from("");
     f.read_to_string(&mut s).expect("Could not read file to string");
-    let t : TestCases = json::decode(&s).unwrap();
+    let cases : TestCases = json::decode(&s).unwrap();
+
+    for c in cases.iter() {
+        run_test_case(&config, &c);
+    }
+    
 }
