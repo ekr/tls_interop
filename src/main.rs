@@ -69,7 +69,7 @@ fn copy_data(from: &mut Agent, to: &mut Agent) {
     let rv = from.socket.read(b);
     let size = match rv {
         Err(err) => {
-            panic!("read failed");
+            return;
         },
         Ok(size) => size
     };
