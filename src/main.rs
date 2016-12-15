@@ -1,10 +1,11 @@
-extern crate rustc_serialize;
+#[macro_use]
+extern crate log;
 extern crate mio;
+extern crate env_logger;
+extern crate rustc_serialize;
 use mio::*;
 use mio::tcp::{TcpListener, TcpStream};
 use rustc_serialize::json;
-use std::env;
-use std::io;
 use std::io::prelude::*;
 use std::fs::File;
 use std::process::{Child, Command, ExitStatus};
@@ -12,6 +13,7 @@ use std::process::{Child, Command, ExitStatus};
 const CLIENT: Token = mio::Token(0);
 const SERVER: Token = mio::Token(1);
 
+#[allow(dead_code)]
 struct Agent {
     name : String,
     path : String,
@@ -37,7 +39,7 @@ impl Agent {
         command.arg(listener.local_addr().unwrap().port().to_string());
         command.arg("-exit-after-handshake");        
 
-        let mut child = command.spawn().unwrap();
+        let child = command.spawn().unwrap();
 
         // Listen for connect
         // Create an poll instance
@@ -52,7 +54,7 @@ impl Agent {
                 SERVER => {
                     let sock = listener.accept();
 
-                    println!("Accepted");
+                    debug!("Accepted");
 
                     return Ok(Agent {
                         name: name.clone(),
@@ -71,11 +73,13 @@ impl Agent {
         unreachable!()
     }
 
-    fn check_status(&self) {
+    fn check_status(&self) -> bool{
         match self.exit_value {
             None => unreachable!(),
             Some(ev) => {
-                println!("Exit status for {} = {}", self.name, ev.code().unwrap());
+                let code = ev.code().unwrap();
+                debug!("Exit status for {} = {}", self.name, code);
+                return code == 0
             }
         }
     }
@@ -86,28 +90,29 @@ fn copy_data(poll: &Poll, from: &mut Agent, to: &mut Agent) {
     let mut b = &mut buf[..];
     let rv = from.socket.read(b);
     let size = match rv {
-        Err(err) => {
-            println!("Error on {}", from.name);
+        Err(_) => {
+            debug!("Error on {}", from.name);
             0
         },
         Ok(size) => size
     };
     if size == 0 {
-        println!("End of file on {}", from.name);
+        debug!("End of file on {}", from.name);
+        poll.deregister(&from.socket).expect("Could not deregister socket");
         from.alive = false;
         from.exit_value = Some(from.child.wait().unwrap());
         return;
     }
-    println!("Buf {} ", size);
+    debug!("Buf {} ", size);
     
-    let mut b2 = &mut b[0..size];
+    let b2 = &b[0..size];
     let rv = to.socket.write_all(b2);
     match rv {
-        Err(err) => {
+        Err(_) => {
             panic!("write failed");
         },
         _ => {
-            println!("Write succeeded");
+            debug!("Write succeeded");
         }
     };
 }
@@ -127,11 +132,11 @@ fn shuttle(client: &mut Agent, server: &mut Agent) {
         for event in events.iter() {
             match event.token() {
                 CLIENT => {
-                    println!("Client ready");
+                    debug!("Client ready");
                     copy_data(&poll, client, server);
                 },
                 SERVER => {
-                    println!("Server ready");
+                    debug!("Server ready");
                     copy_data(&poll, server, client);
                 },
                 _ => unreachable!()
@@ -166,7 +171,7 @@ struct TestConfig {
     server_shim : String,
 }
 
-fn run_test_case(config: &TestConfig, case: &TestCase) {
+fn run_test_case(config: &TestConfig, case: &TestCase) -> bool{
     let mut server = Agent::new(&String::from("server"),
                                 &config.server_shim,
                                 vec![
@@ -180,12 +185,17 @@ fn run_test_case(config: &TestConfig, case: &TestCase) {
                                 vec![]).unwrap();
     shuttle(&mut client, &mut server);
 
-    client.check_status();
-    server.check_status();
+    if !(client.check_status() && server.check_status()) {
+        info!("FAILED: {}", case.name);
+        return false;
+    }
+    true
 }
 
 
 fn main() {
+    env_logger::init().expect("Could not init logging");
+    
     let config = TestConfig {
         client_shim : String::from("/Users/ekr/dev/nss-dev/nss-sandbox2/dist/Darwin15.6.0_cc_64_DBG.OBJ/bin/nss_bogo_shim"),
         server_shim : String::from("/Users/ekr/dev/nss-dev/nss-sandbox2/dist/Darwin15.6.0_cc_64_DBG.OBJ/bin/nss_bogo_shim"),
@@ -196,7 +206,7 @@ fn main() {
     f.read_to_string(&mut s).expect("Could not read file to string");
     let cases : TestCases = json::decode(&s).unwrap();
 
-    for c in cases.iter() {
+    for c in cases.cases {
         run_test_case(&config, &c);
     }
     
