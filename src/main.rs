@@ -2,6 +2,7 @@ extern crate mio;
 use mio::*;
 use mio::tcp::{TcpListener, TcpStream};
 use std::io::Read;
+use std::io::Write;
 use std::process::{Child, Command};
 
 const CLIENT: Token = mio::Token(0);
@@ -65,13 +66,25 @@ impl Agent {
 fn copy_data(from: &mut Agent, to: &mut Agent) {
     let mut buf: [u8; 1024] = [0; 1024];
     let mut b = &mut buf[..];
-    let size = from.socket.read(b);
-    println!("Buf {} ",size.unwrap());
+    let rv = from.socket.read(b);
+    let size = match rv {
+        Err(err) => {
+            panic!("read failed");
+        },
+        Ok(size) => size
+    };
+    println!("Buf {} ", size);
+    let mut b2 = &mut b[0..size];
 
-    for x in b.iter() {
-        print!("{} ", x);
-    }    
-    panic!();
+    let rv = to.socket.write_all(b2);
+    match rv {
+        Err(err) => {
+            panic!("read failed");
+        },
+        _ => {
+            println!("Write succeeded");
+        }
+    };
 }
 
 fn shuttle(client: &mut Agent, server: &mut Agent) {
@@ -79,9 +92,9 @@ fn shuttle(client: &mut Agent, server: &mut Agent) {
     // Create an poll instance
     let poll = Poll::new().unwrap();        
     poll.register(&client.socket, CLIENT, Ready::readable(),
-                  PollOpt::level()).unwrap();
+                  PollOpt::edge()).unwrap();
     poll.register(&server.socket, SERVER, Ready::readable(),
-                  PollOpt::level()).unwrap();
+                  PollOpt::edge()).unwrap();
     let mut events = Events::with_capacity(1024);
 
     poll.poll(&mut events, None).unwrap();
@@ -104,15 +117,15 @@ fn shuttle(client: &mut Agent, server: &mut Agent) {
 
 fn main() {
     let mut server = Agent::new(String::from("server"),
-                            String::from("/Users/ekr/dev/boringssl//build/ssl/test/bssl_shim"),
-                            Vec::new()).unwrap();
+                                String::from("/Users/ekr/dev/boringssl//build/ssl/test/bssl_shim"),
+                                vec![
+                                    String::from("-server"),
+                                    String::from("-key-file"),
+                                    String::from("/Users/ekr/dev/boringssl/ssl/test/runner/server.pem"),
+                                    String::from("-cert-file"),
+                                    String::from("/Users/ekr/dev/boringssl/ssl/test/runner/server.pem")]).unwrap();
     let mut client = Agent::new(String::from("client"),
-                            String::from("/Users/ekr/dev/boringssl//build/ssl/test/bssl_shim"),
-                            vec![String::from("-server"),
-                                 String::from("-key-file"),
-                                 String::from("/Users/ekr/dev/boringssl/ssl/test/runner/server.pem"),
-                                 String::from("-cert-file"),
-                                 String::from("/Users/ekr/dev/boringssl/ssl/test/runner/server.pem")]
-    ).unwrap();
+                                String::from("/Users/ekr/dev/boringssl//build/ssl/test/bssl_shim"),
+                                vec![]).unwrap();
     shuttle(&mut client, &mut server);
 }
