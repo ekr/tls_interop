@@ -3,7 +3,7 @@ use mio::*;
 use mio::tcp::{TcpListener, TcpStream};
 use std::io::Read;
 use std::io::Write;
-use std::process::{Child, Command};
+use std::process::{Child, Command, ExitStatus};
 
 const CLIENT: Token = mio::Token(0);
 const SERVER: Token = mio::Token(1);
@@ -13,7 +13,9 @@ struct Agent {
     path : String,
     args : Vec<String>,
     socket : TcpStream,
-    child: Child
+    child: Child,
+    alive : bool,
+    exit_value : Option<ExitStatus>,
 }
 
 impl Agent {
@@ -29,6 +31,7 @@ impl Agent {
         
         command.arg("-port");
         command.arg(listener.local_addr().unwrap().port().to_string());
+        command.arg("-exit-after-handshake");        
 
         let mut child = command.spawn().unwrap();
 
@@ -51,8 +54,10 @@ impl Agent {
                         name: name,
                         path: path,
                         args: args,
-                        child: child,
                         socket: sock.unwrap().0,
+                        child: child,
+                        alive: true,
+                        exit_value: None,
                     })
                 },
                 _ => return Err(-1),
@@ -61,24 +66,41 @@ impl Agent {
 
         unreachable!()
     }
+
+    fn check_status(&self) {
+        match self.exit_value {
+            None => unreachable!(),
+            Some(ev) => {
+                println!("Exit status for {} = {}", self.name, ev.code().unwrap());
+            }
+        }
+    }
 }
 
-fn copy_data(from: &mut Agent, to: &mut Agent) {
+fn copy_data(poll: &Poll, from: &mut Agent, to: &mut Agent) {
     let mut buf: [u8; 1024] = [0; 1024];
     let mut b = &mut buf[..];
     let rv = from.socket.read(b);
     let size = match rv {
         Err(err) => {
-            return;
+            println!("Error on {}", from.name);
+            0
         },
         Ok(size) => size
     };
+    if size == 0 {
+        println!("End of file on {}", from.name);
+        from.alive = false;
+        from.exit_value = Some(from.child.wait().unwrap());
+        return;
+    }
     println!("Buf {} ", size);
+    
     let mut b2 = &mut b[0..size];
     let rv = to.socket.write_all(b2);
     match rv {
         Err(err) => {
-            panic!("read failed");
+            panic!("write failed");
         },
         _ => {
             println!("Write succeeded");
@@ -96,27 +118,32 @@ fn shuttle(client: &mut Agent, server: &mut Agent) {
                   PollOpt::edge()).unwrap();
     let mut events = Events::with_capacity(1024);
 
-    loop {
+    while client.alive || server.alive {
         poll.poll(&mut events, None).unwrap();
         for event in events.iter() {
             match event.token() {
                 CLIENT => {
                     println!("Client ready");
-                    copy_data(client, server);
+                    copy_data(&poll, client, server);
                 },
                 SERVER => {
                     println!("Server ready");
-                    copy_data(server, client);                    
+                    copy_data(&poll, server, client);
                 },
                 _ => unreachable!()
             }
         }
-    }    
+    }
 }
 
 fn main() {
+    let client_shim = String::from("/Users/ekr/dev/nss-dev/nss-sandbox2/dist/Darwin15.6.0_cc_64_DBG.OBJ/bin/nss_bogo_shim");
+    let server_shim = String::from("/Users/ekr/dev/nss-dev/nss-sandbox2/dist/Darwin15.6.0_cc_64_DBG.OBJ/bin/nss_bogo_shim");
+//    let client_shim = String::from("/Users/ekr/dev/boringssl/build/ssl/test/bssl_shim");
+//    let server_shim = String::from("/Users/ekr/dev/boringssl/build/ssl/test/bssl_shim");
+
     let mut server = Agent::new(String::from("server"),
-                                String::from("/Users/ekr/dev/nss-dev/nss-sandbox2/dist/Darwin15.6.0_cc_64_DBG.OBJ/bin/nss_bogo_shim"),
+                                server_shim.clone(),
                                 vec![
                                     String::from("-server"),
                                     String::from("-key-file"),
@@ -124,7 +151,10 @@ fn main() {
                                     String::from("-cert-file"),
                                     String::from("/Users/ekr/dev/boringssl/ssl/test/runner/rsa_1024_cert.pem")]).unwrap();
     let mut client = Agent::new(String::from("client"),
-                                String::from("/Users/ekr/dev/nss-dev/nss-sandbox2/dist/Darwin15.6.0_cc_64_DBG.OBJ/bin/nss_bogo_shim"),
+                                client_shim.clone(),
                                 vec![]).unwrap();
     shuttle(&mut client, &mut server);
+
+    client.check_status();
+    server.check_status();
 }
