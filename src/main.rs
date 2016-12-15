@@ -155,6 +155,7 @@ struct TestCaseAgent {
 #[derive(Debug)]
 struct TestCase {
     name: String,
+    server_key : Option<String>,
     versions : Option<Vec<String>>,
     client : Option<TestCaseAgent>,
     server : Option<TestCaseAgent>,
@@ -169,17 +170,27 @@ struct TestCases {
 struct TestConfig {
     client_shim : String,
     server_shim : String,
+    key_root : String,
 }
 
 fn run_test_case(config: &TestConfig, case: &TestCase) -> bool{
+    // Create the server args
+    let mut server_args = vec![
+        String::from("-server")
+    ];
+    let key_base =
+        match case.server_key {
+            None => String::from("rsa_1024"),
+            Some(ref key) => key.clone()
+        };
+    server_args.push(String::from("-key-file"));
+    server_args.push(config.key_root.clone() + &key_base + &String::from("_key.pem"));
+    server_args.push(String::from("-cert-file"));
+    server_args.push(config.key_root.clone() + &key_base + &String::from("_cert.pem"));
+    
     let mut server = Agent::new(&String::from("server"),
                                 &config.server_shim,
-                                vec![
-                                    String::from("-server"),
-                                    String::from("-key-file"),
-                                    String::from("/Users/ekr/dev/boringssl/ssl/test/runner/rsa_1024_key.pem"),
-                                    String::from("-cert-file"),
-                                    String::from("/Users/ekr/dev/boringssl/ssl/test/runner/rsa_1024_cert.pem")]).unwrap();
+                                server_args).unwrap();
     let mut client = Agent::new(&String::from("client"),
                                 &config.client_shim,
                                 vec![]).unwrap();
@@ -199,6 +210,7 @@ fn main() {
     let config = TestConfig {
         client_shim : String::from("/Users/ekr/dev/nss-dev/nss-sandbox2/dist/Darwin15.6.0_cc_64_DBG.OBJ/bin/nss_bogo_shim"),
         server_shim : String::from("/Users/ekr/dev/nss-dev/nss-sandbox2/dist/Darwin15.6.0_cc_64_DBG.OBJ/bin/nss_bogo_shim"),
+        key_root : String::from("/Users/ekr/dev/boringssl/ssl/test/runner/"),
     };
 
     let mut f = File::open("cases.json").unwrap();
