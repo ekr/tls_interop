@@ -69,13 +69,12 @@ fn copy_data(from: &mut Agent, to: &mut Agent) {
     let rv = from.socket.read(b);
     let size = match rv {
         Err(err) => {
-            panic!("read failed");
+            return;
         },
         Ok(size) => size
     };
     println!("Buf {} ", size);
     let mut b2 = &mut b[0..size];
-
     let rv = to.socket.write_all(b2);
     match rv {
         Err(err) => {
@@ -97,8 +96,8 @@ fn shuttle(client: &mut Agent, server: &mut Agent) {
                   PollOpt::edge()).unwrap();
     let mut events = Events::with_capacity(1024);
 
-    poll.poll(&mut events, None).unwrap();
     loop {
+        poll.poll(&mut events, None).unwrap();
         for event in events.iter() {
             match event.token() {
                 CLIENT => {
@@ -117,15 +116,15 @@ fn shuttle(client: &mut Agent, server: &mut Agent) {
 
 fn main() {
     let mut server = Agent::new(String::from("server"),
-                                String::from("/Users/ekr/dev/boringssl//build/ssl/test/bssl_shim"),
+                                String::from("/Users/ekr/dev/nss-dev/nss-sandbox2/dist/Darwin15.6.0_cc_64_DBG.OBJ/bin/nss_bogo_shim"),
                                 vec![
                                     String::from("-server"),
                                     String::from("-key-file"),
-                                    String::from("/Users/ekr/dev/boringssl/ssl/test/runner/server.pem"),
+                                    String::from("/Users/ekr/dev/boringssl/ssl/test/runner/rsa_1024_key.pem"),
                                     String::from("-cert-file"),
-                                    String::from("/Users/ekr/dev/boringssl/ssl/test/runner/server.pem")]).unwrap();
+                                    String::from("/Users/ekr/dev/boringssl/ssl/test/runner/rsa_1024_cert.pem")]).unwrap();
     let mut client = Agent::new(String::from("client"),
-                                String::from("/Users/ekr/dev/boringssl//build/ssl/test/bssl_shim"),
+                                String::from("/Users/ekr/dev/nss-dev/nss-sandbox2/dist/Darwin15.6.0_cc_64_DBG.OBJ/bin/nss_bogo_shim"),
                                 vec![]).unwrap();
     shuttle(&mut client, &mut server);
 }
