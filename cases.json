@@ -1,0 +1,15 @@
+{
+    "cases" : [
+        {
+            "name" : "Bogus flag",
+            "server" : {
+                "flags" : [
+                    "-unknown"
+                ]
+            }
+        },
+        {
+            "name" : "Simple-Connect"
+        }
+    ]
+}
