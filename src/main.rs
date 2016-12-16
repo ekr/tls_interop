@@ -9,9 +9,12 @@ use rustc_serialize::json;
 use std::io::prelude::*;
 use std::fs::File;
 use std::process::{Child, Command, ExitStatus};
+use std::thread;
+use std::sync::{Arc, Mutex};
 
 const CLIENT: Token = mio::Token(0);
 const SERVER: Token = mio::Token(1);
+const FAILED: Token = mio::Token(2);
 
 #[allow(dead_code)]
 struct Agent {
@@ -19,7 +22,7 @@ struct Agent {
     path : String,
     args : Vec<String>,
     socket : TcpStream,
-    child: Child,
+    child: Arc<Mutex<Child>>,
     alive : bool,
     exit_value : Option<ExitStatus>,
 }
@@ -47,29 +50,55 @@ impl Agent {
         poll.register(&listener, SERVER, Ready::readable(),
                       PollOpt::edge()).unwrap();
         let mut events = Events::with_capacity(1024);
+        
+        let (txf, rxf) = channel::channel::<i32>();
+        poll.register(&rxf, FAILED, Ready::readable(),
+                      PollOpt::edge()).unwrap();
+        
+        let ccopy = Arc::new(Mutex::new(child));
+        let ccopy2 = ccopy.clone(); // Gross!
+        
+        let thr = thread::spawn(move || {
+            let ecode = ccopy2.lock().unwrap().wait().expect("failed waiting for subprocess");
+            // If we exited, something is wrong, so frob failed.
+            // TODO(ekr@rtfm.com): This thread is left hanging at this point,
+            // which is why the send may fail. Clean up or something.
+            txf.send(match ecode.code() {
+                None => -1,
+                Some(e) => e
+            });
+        });
 
         poll.poll(&mut events, None).unwrap();
+        debug!("Poll finished!");
         for event in events.iter() {
-            match event.token() {
+            debug!("Event!");
+            match event.token(){
                 SERVER => {
                     let sock = listener.accept();
 
                     debug!("Accepted");
-
+                    
                     return Ok(Agent {
                         name: name.clone(),
                         path: path.clone(),
                         args: args,
                         socket: sock.unwrap().0,
-                        child: child,
+                        child: ccopy,
                         alive: true,
                         exit_value: None,
                     })
+                },
+                FAILED => {
+                    let err = rxf.try_recv().unwrap();
+                    info!("Failed {}", err);
+                    return Err(err);
                 },
                 _ => return Err(-1),
             }
         }
 
+        debug!("Started {}", name);
         unreachable!()
     }
 
@@ -100,7 +129,7 @@ fn copy_data(poll: &Poll, from: &mut Agent, to: &mut Agent) {
         debug!("End of file on {}", from.name);
         poll.deregister(&from.socket).expect("Could not deregister socket");
         from.alive = false;
-        from.exit_value = Some(from.child.wait().unwrap());
+        from.exit_value = Some(from.child.lock().unwrap().wait().unwrap());
         return;
     }
     debug!("Buf {} ", size);
@@ -173,7 +202,13 @@ struct TestConfig {
     key_root : String,
 }
 
-fn run_test_case(config: &TestConfig, case: &TestCase) -> bool{
+enum TestResult {
+    OK,
+    Skipped,
+    Failed
+}
+
+fn run_test_case(config: &TestConfig, case: &TestCase) -> TestResult {
     // Create the server args
     let mut server_args = vec![
         String::from("-server")
@@ -187,20 +222,43 @@ fn run_test_case(config: &TestConfig, case: &TestCase) -> bool{
     server_args.push(config.key_root.clone() + &key_base + &String::from("_key.pem"));
     server_args.push(String::from("-cert-file"));
     server_args.push(config.key_root.clone() + &key_base + &String::from("_cert.pem"));
-    
-    let mut server = Agent::new(&String::from("server"),
-                                &config.server_shim,
-                                server_args).unwrap();
-    let mut client = Agent::new(&String::from("client"),
-                                &config.client_shim,
-                                vec![]).unwrap();
-    shuttle(&mut client, &mut server);
+    match case.server {
+        None => (),
+        Some(ref server) => {
+            match server.flags {
+                None => (),
+                Some (ref flags) => {
+                    for f in flags {
+                        server_args.push(f.clone());
+                    }
+                }
+            }
+        },
+    }
 
+    let mut server = match Agent::new(&String::from("server"),
+                              &config.server_shim,
+                              server_args) {
+        Ok(a) => a,
+        Err(89) => { return TestResult::Skipped; }
+        Err(_) => { return TestResult::Failed; }
+    };
+
+    let mut client = match Agent::new(&String::from("client"),
+                                      &config.client_shim,
+                                      vec![]) {
+        Ok(a) => a,
+        Err(89) => { return TestResult::Skipped; }
+        Err(_) => { return TestResult::Failed; }
+    };
+
+    shuttle(&mut client, &mut server);
+    
     if !(client.check_status() && server.check_status()) {
         info!("FAILED: {}", case.name);        
-        return false;
+        return TestResult::Failed;
     }
-    true
+    TestResult::OK
 }
 
 
@@ -221,16 +279,17 @@ fn main() {
     let mut ran = 0;
     let mut succeeded = 0;
     let mut failed = 0;
+    let mut skipped = 0;
     
     for c in cases.cases {
         ran += 1;
-        if run_test_case(&config, &c) {
-            succeeded += 1;
-        } else {
-            failed += 1;
+        match run_test_case(&config, &c) {
+            TestResult::OK => succeeded += 1,
+            TestResult::Skipped => skipped += 1,
+            TestResult::Failed => failed +=1
         }
     }
 
-    println!("Tests {}; Succeeded {}; Failed {}",
-             ran, succeeded, failed);
+    println!("Tests {}; Succeeded {}; Skipped {}, Failed {}",
+             ran, succeeded, skipped, failed);
 }
