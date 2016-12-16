@@ -33,33 +33,32 @@ impl Agent {
     fn new(name: &String, path: &String, args: Vec<String>) -> Result<Agent, i32> {
         let addr = "127.0.0.1:13265".parse().unwrap();
         let listener = TcpListener::bind(&addr).unwrap();
-        
+
         // Start the subprocess.
         let mut command = Command::new(path.clone());
         for arg in args.iter() {
             command.arg(arg);
         }
-        
+
         command.arg("-port");
         command.arg(listener.local_addr().unwrap().port().to_string());
-        command.arg("-exit-after-handshake");        
 
         let child = command.spawn().unwrap();
 
         // Listen for connect
         // Create an poll instance
-        let poll = Poll::new().unwrap();        
+        let poll = Poll::new().unwrap();
         poll.register(&listener, SERVER, Ready::readable(),
                       PollOpt::edge()).unwrap();
         let mut events = Events::with_capacity(1024);
-        
+
         let (txf, rxf) = channel::channel::<i32>();
         poll.register(&rxf, FAILED, Ready::readable(),
                       PollOpt::edge()).unwrap();
-        
+
         let ccopy = Arc::new(Mutex::new(child));
         let ccopy2 = ccopy.clone(); // Gross!
-        
+
         let thr = thread::spawn(move || {
             let ecode = ccopy2.lock().unwrap().wait().expect("failed waiting for subprocess");
             // If we exited, something is wrong, so frob failed.
@@ -80,7 +79,7 @@ impl Agent {
                     let sock = listener.accept();
 
                     debug!("Accepted");
-                    
+
                     return Ok(Agent {
                         name: name.clone(),
                         path: path.clone(),
@@ -135,7 +134,7 @@ fn copy_data(poll: &Poll, from: &mut Agent, to: &mut Agent) {
         return;
     }
     debug!("Buf {} ", size);
-    
+
     let b2 = &b[0..size];
     let rv = to.socket.write_all(b2);
     match rv {
@@ -151,7 +150,7 @@ fn copy_data(poll: &Poll, from: &mut Agent, to: &mut Agent) {
 fn shuttle(client: &mut Agent, server: &mut Agent) {
     // Listen for connect
     // Create an poll instance
-    let poll = Poll::new().unwrap();        
+    let poll = Poll::new().unwrap();
     poll.register(&client.socket, CLIENT, Ready::readable(),
                   PollOpt::edge()).unwrap();
     poll.register(&server.socket, SERVER, Ready::readable(),
@@ -224,6 +223,8 @@ fn run_test_case(config: &TestConfig, case: &TestCase) -> TestResult {
     server_args.push(config.rootdir.clone() + &key_base + &String::from("_key.pem"));
     server_args.push(String::from("-cert-file"));
     server_args.push(config.rootdir.clone() + &key_base + &String::from("_cert.pem"));
+    server_args.push(String::from("-write-then-read"));
+
     match case.server {
         None => (),
         Some(ref server) => {
@@ -255,9 +256,9 @@ fn run_test_case(config: &TestConfig, case: &TestCase) -> TestResult {
     };
 
     shuttle(&mut client, &mut server);
-    
+
     if !(client.check_status() && server.check_status()) {
-        info!("FAILED: {}", case.name);        
+        info!("FAILED: {}", case.name);
         return TestResult::Failed;
     }
     TestResult::OK
@@ -290,7 +291,7 @@ fn main() {
              .takes_value(true)
              .required(true))
         .get_matches();
-    
+
     let config = TestConfig {
         client_shim : String::from(matches.value_of("client").unwrap()),
         server_shim : String::from(matches.value_of("server").unwrap()),
@@ -306,7 +307,7 @@ fn main() {
     let mut succeeded = 0;
     let mut failed = 0;
     let mut skipped = 0;
-    
+
     for c in cases.cases {
         ran += 1;
         match run_test_case(&config, &c) {
