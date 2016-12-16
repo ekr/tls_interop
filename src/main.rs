@@ -284,6 +284,11 @@ fn main() {
              .help("The path where the working files are")
              .takes_value(true)
              .required(true))
+        .arg(Arg::with_name("cases")
+             .long("test-cases")
+             .help("The test cases file to run")
+             .takes_value(true)
+             .required(true))
         .get_matches();
     
     let config = TestConfig {
@@ -292,7 +297,7 @@ fn main() {
         rootdir : String::from(matches.value_of("rootdir").unwrap()),
     };
 
-    let mut f = File::open("cases.json").unwrap();
+    let mut f = File::open(matches.value_of("cases").unwrap()).unwrap();
     let mut s = String::from("");
     f.read_to_string(&mut s).expect("Could not read file to string");
     let cases : TestCases = json::decode(&s).unwrap();
