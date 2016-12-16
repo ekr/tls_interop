@@ -1,8 +1,10 @@
+extern crate clap;
 #[macro_use]
 extern crate log;
 extern crate mio;
 extern crate env_logger;
 extern crate rustc_serialize;
+use clap::{Arg, App};
 use mio::*;
 use mio::tcp::{TcpListener, TcpStream};
 use rustc_serialize::json;
@@ -199,7 +201,7 @@ struct TestCases {
 struct TestConfig {
     client_shim : String,
     server_shim : String,
-    key_root : String,
+    rootdir : String,
 }
 
 enum TestResult {
@@ -219,9 +221,9 @@ fn run_test_case(config: &TestConfig, case: &TestCase) -> TestResult {
             Some(ref key) => key.clone()
         };
     server_args.push(String::from("-key-file"));
-    server_args.push(config.key_root.clone() + &key_base + &String::from("_key.pem"));
+    server_args.push(config.rootdir.clone() + &key_base + &String::from("_key.pem"));
     server_args.push(String::from("-cert-file"));
-    server_args.push(config.key_root.clone() + &key_base + &String::from("_cert.pem"));
+    server_args.push(config.rootdir.clone() + &key_base + &String::from("_cert.pem"));
     match case.server {
         None => (),
         Some(ref server) => {
@@ -264,11 +266,30 @@ fn run_test_case(config: &TestConfig, case: &TestCase) -> TestResult {
 
 fn main() {
     env_logger::init().expect("Could not init logging");
+
+    let matches = App::new("TLS interop tests")
+        .version("0.0")
+        .arg(Arg::with_name("client")
+             .long("client")
+             .help("The shim to use as the client")
+             .takes_value(true)
+             .required(true))
+        .arg(Arg::with_name("server")
+             .long("server")
+             .help("The shim to use as the server")
+             .takes_value(true)
+             .required(true))
+        .arg(Arg::with_name("rootdir")
+             .long("rootdir")
+             .help("The path where the working files are")
+             .takes_value(true)
+             .required(true))
+        .get_matches();
     
     let config = TestConfig {
-        client_shim : String::from("/Users/ekr/dev/nss-dev/nss-sandbox2/dist/Darwin15.6.0_cc_64_DBG.OBJ/bin/nss_bogo_shim"),
-        server_shim : String::from("/Users/ekr/dev/nss-dev/nss-sandbox2/dist/Darwin15.6.0_cc_64_DBG.OBJ/bin/nss_bogo_shim"),
-        key_root : String::from("/Users/ekr/dev/boringssl/ssl/test/runner/"),
+        client_shim : String::from(matches.value_of("client").unwrap()),
+        server_shim : String::from(matches.value_of("server").unwrap()),
+        rootdir : String::from(matches.value_of("rootdir").unwrap()),
     };
 
     let mut f = File::open("cases.json").unwrap();
