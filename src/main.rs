@@ -52,13 +52,21 @@ impl Agent {
                       PollOpt::level()).unwrap();
         let mut events = Events::with_capacity(1024);
 
+        // This is gross, but we can't reregister channels.
+        // https://github.com/carllerche/mio/issues/506
         let (txf, rxf) = channel::channel::<i32>();
+        let (txf2, rxf2) = channel::channel::<i32>();
+        
         poll.register(&rxf, FAILED, Ready::readable(),
                       PollOpt::level()).unwrap();
 
         thread::spawn(move || {
             let ecode = child.wait().expect("failed waiting for subprocess");
             txf.send(match ecode.code() {
+                None => -1,
+                Some(e) => e
+            });
+            txf2.send(match ecode.code() {
                 None => -1,
                 Some(e) => e
             });
@@ -73,15 +81,12 @@ impl Agent {
                     let sock = listener.accept();
 
                     debug!("Accepted");
-                    // Deregister the receive channel so we can receive
-                    // it elsewhere.
-                    poll.deregister(&rxf);
                     return Ok(Agent {
                         name: name.clone(),
                         path: path.clone(),
                         args: args,
                         socket: sock.unwrap().0,
-                        child: rxf,
+                        child: rxf2,
                         alive: true,
                         exit_value: None,
                     })
