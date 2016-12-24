@@ -16,7 +16,7 @@ use std::thread;
 
 const CLIENT: Token = mio::Token(0);
 const SERVER: Token = mio::Token(1);
-const FAILED: Token = mio::Token(2);
+const STATUS: Token = mio::Token(2);
 
 #[allow(dead_code)]
 struct Agent {
@@ -57,7 +57,7 @@ impl Agent {
         let (txf, rxf) = channel::channel::<i32>();
         let (txf2, rxf2) = channel::channel::<i32>();
         
-        poll.register(&rxf, FAILED, Ready::readable(),
+        poll.register(&rxf, STATUS, Ready::readable(),
                       PollOpt::level()).unwrap();
 
         thread::spawn(move || {
@@ -91,7 +91,7 @@ impl Agent {
                         exit_value: None,
                     })
                 },
-                FAILED => {
+                STATUS => {
                     let err = rxf.try_recv().unwrap();
                     info!("Failed {}", err);
                     return Err(err);
@@ -109,7 +109,7 @@ impl Agent {
         debug!("Getting status for {}", self.name);
         // try_recv() is nonblocking, so poll until it's readable.
         let poll = Poll::new().unwrap();
-        poll.register(&self.child, mio::Token(0), Ready::readable(),
+        poll.register(&self.child, STATUS, Ready::readable(),
                       PollOpt::level()).unwrap();
         let mut events = Events::with_capacity(1);
         poll.poll(&mut events, None).unwrap();
