@@ -65,7 +65,7 @@ impl Agent {
             txf.send(match ecode.code() {
                 None => -1,
                 Some(e) => e
-            });
+            }).ok();
             txf2.send(match ecode.code() {
                 None => -1,
                 Some(e) => e
