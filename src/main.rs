@@ -6,7 +6,7 @@ extern crate env_logger;
 extern crate rustc_serialize;
 use clap::{Arg, App};
 use mio::*;
-use mio::tcp::{TcpListener, TcpStream};
+use mio::tcp::{TcpListener, TcpStream, Shutdown};
 use rustc_serialize::json;
 use std::io::prelude::*;
 use std::fs::File;
@@ -104,7 +104,8 @@ impl Agent {
     }
 
     fn check_status(&self) -> bool{
-        match self.exit_value {
+        let exit_value = Some(self.child.lock().unwrap().wait().unwrap());
+        match exit_value {
             None => unreachable!(),
             Some(ev) => {
                 let code = ev.code().unwrap();
@@ -129,8 +130,8 @@ fn copy_data(poll: &Poll, from: &mut Agent, to: &mut Agent) {
     if size == 0 {
         debug!("End of file on {}", from.name);
         poll.deregister(&from.socket).expect("Could not deregister socket");
+        to.socket.shutdown(Shutdown::Write).expect("Shutdown failed");
         from.alive = false;
-        from.exit_value = Some(from.child.lock().unwrap().wait().unwrap());
         return;
     }
     debug!("Buf {} ", size);
