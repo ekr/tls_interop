@@ -105,7 +105,7 @@ impl Agent {
     }
 
     // Read the status from the subthread.
-    fn check_status(&self) -> bool{
+    fn check_status(&self) -> TestResult {
         debug!("Getting status for {}", self.name);
         // try_recv() is nonblocking, so poll until it's readable.
         let poll = Poll::new().unwrap();
@@ -116,7 +116,7 @@ impl Agent {
         
         let code = self.child.try_recv().unwrap();
         debug!("Exit status for {} = {}", self.name, code);
-        return code == 0
+        return TestResult::from_status(code);
     }
 }
 
@@ -214,6 +214,30 @@ enum TestResult {
     Failed
 }
 
+impl TestResult {
+    fn from_status(status: i32) -> TestResult {
+        match status {
+            0 => TestResult::OK,
+            89 => TestResult::Skipped,
+            _ => TestResult::Failed
+        }
+    }
+
+    // Return a combined return status. If either side skipped, then
+    // we mark it skipped. Otherwise we return OK only if both sides
+    // reported OK.
+    fn merge(a: TestResult, b: TestResult) -> TestResult{
+        let res = (a, b);
+        match res {
+            (TestResult::Skipped, _) =>  TestResult::Skipped,
+            (_, TestResult::Skipped) =>  TestResult::Skipped,
+            (TestResult::Failed, _) =>  TestResult::Failed,
+            (_, TestResult::Failed) =>  TestResult::Failed,
+            (TestResult::OK, TestResult::OK) => TestResult::OK
+        }
+    }
+}    
+
 fn run_test_case(config: &TestConfig, case: &TestCase) -> TestResult {
     // Create the server args
     let mut server_args = vec![
@@ -245,25 +269,19 @@ fn run_test_case(config: &TestConfig, case: &TestCase) -> TestResult {
                                       &config.server_shim,
                                       server_args) {
         Ok(a) => a,
-        Err(89) => { return TestResult::Skipped; }
-        Err(_) => { return TestResult::Failed; }
+        Err(e) => { return TestResult::from_status(e); }
     };
 
     let mut client = match Agent::new("client",
                                       &config.client_shim,
                                       vec![]) {
         Ok(a) => a,
-        Err(89) => { return TestResult::Skipped; }
-        Err(_) => { return TestResult::Failed; }
+        Err(e) => { return TestResult::from_status(e); }
     };
 
     shuttle(&mut client, &mut server);
 
-    if !(client.check_status() && server.check_status()) {
-        info!("FAILED: {}", case.name);
-        return TestResult::Failed;
-    }
-    TestResult::OK
+    return TestResult::merge(client.check_status(), server.check_status());
 }
 
 
