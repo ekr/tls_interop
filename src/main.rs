@@ -117,7 +117,7 @@ impl Agent {
 }
 
 fn copy_data(poll: &Poll, from: &mut Agent, to: &mut Agent) {
-    let mut buf: [u8; 1024] = [0; 1024];
+    let mut buf: [u8; 16384] = [0; 16384];
     let mut b = &mut buf[..];
     let rv = from.socket.read(b);
     let size = match rv {
