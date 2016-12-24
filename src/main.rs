@@ -30,12 +30,12 @@ struct Agent {
 }
 
 impl Agent {
-    fn new(name: &String, path: &String, args: Vec<String>) -> Result<Agent, i32> {
+    fn new(name: &str, path: &String, args: Vec<String>) -> Result<Agent, i32> {
         let addr = "127.0.0.1:0".parse().unwrap();
         let listener = TcpListener::bind(&addr).unwrap();
 
         // Start the subprocess.
-        let mut command = Command::new(path.clone());
+        let mut command = Command::new(path.to_owned());
         for arg in args.iter() {
             command.arg(arg);
         }
@@ -82,8 +82,8 @@ impl Agent {
 
                     debug!("Accepted");
                     return Ok(Agent {
-                        name: name.clone(),
-                        path: path.clone(),
+                        name: name.to_owned(),
+                        path: path.to_owned(),
                         args: args,
                         socket: sock.unwrap().0,
                         child: rxf2,
@@ -244,15 +244,15 @@ fn run_test_case(config: &TestConfig, case: &TestCase) -> TestResult {
         },
     }
 
-    let mut server = match Agent::new(&String::from("server"),
-                              &config.server_shim,
-                              server_args) {
+    let mut server = match Agent::new("server",
+                                      &config.server_shim,
+                                      server_args) {
         Ok(a) => a,
         Err(89) => { return TestResult::Skipped; }
         Err(_) => { return TestResult::Failed; }
     };
 
-    let mut client = match Agent::new(&String::from("client"),
+    let mut client = match Agent::new("client",
                                       &config.client_shim,
                                       vec![]) {
         Ok(a) => a,
