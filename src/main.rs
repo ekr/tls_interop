@@ -31,7 +31,7 @@ struct Agent {
 
 impl Agent {
     fn new(name: &String, path: &String, args: Vec<String>) -> Result<Agent, i32> {
-        let addr = "127.0.0.1:13265".parse().unwrap();
+        let addr = "127.0.0.1:0".parse().unwrap();
         let listener = TcpListener::bind(&addr).unwrap();
 
         // Start the subprocess.
