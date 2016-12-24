@@ -6,13 +6,13 @@ extern crate env_logger;
 extern crate rustc_serialize;
 use clap::{Arg, App};
 use mio::*;
+use mio::channel::Receiver;
 use mio::tcp::{TcpListener, TcpStream, Shutdown};
 use rustc_serialize::json;
 use std::io::prelude::*;
 use std::fs::File;
-use std::process::{Child, Command, ExitStatus};
+use std::process::{Command, ExitStatus};
 use std::thread;
-use std::sync::{Arc, Mutex};
 
 const CLIENT: Token = mio::Token(0);
 const SERVER: Token = mio::Token(1);
@@ -24,7 +24,7 @@ struct Agent {
     path : String,
     args : Vec<String>,
     socket : TcpStream,
-    child: Arc<Mutex<Child>>,
+    child: Receiver<i32>,
     alive : bool,
     exit_value : Option<ExitStatus>,
 }
@@ -43,7 +43,7 @@ impl Agent {
         command.arg("-port");
         command.arg(listener.local_addr().unwrap().port().to_string());
 
-        let child = command.spawn().unwrap();
+        let mut child = command.spawn().unwrap();
 
         // Listen for connect
         // Create an poll instance
@@ -56,14 +56,8 @@ impl Agent {
         poll.register(&rxf, FAILED, Ready::readable(),
                       PollOpt::level()).unwrap();
 
-        let ccopy = Arc::new(Mutex::new(child));
-        let ccopy2 = ccopy.clone(); // Gross!
-
-        let thr = thread::spawn(move || {
-            let ecode = ccopy2.lock().unwrap().wait().expect("failed waiting for subprocess");
-            // If we exited, something is wrong, so frob failed.
-            // TODO(ekr@rtfm.com): This thread is left hanging at this point,
-            // which is why the send may fail. Clean up or something.
+        thread::spawn(move || {
+            let ecode = child.wait().expect("failed waiting for subprocess");
             txf.send(match ecode.code() {
                 None => -1,
                 Some(e) => e
@@ -79,13 +73,15 @@ impl Agent {
                     let sock = listener.accept();
 
                     debug!("Accepted");
-
+                    // Deregister the receive channel so we can receive
+                    // it elsewhere.
+                    poll.deregister(&rxf);
                     return Ok(Agent {
                         name: name.clone(),
                         path: path.clone(),
                         args: args,
                         socket: sock.unwrap().0,
-                        child: ccopy,
+                        child: rxf,
                         alive: true,
                         exit_value: None,
                     })
@@ -98,21 +94,24 @@ impl Agent {
                 _ => return Err(-1),
             }
         }
-
+        
         debug!("Started {}", name);
         unreachable!()
     }
 
+    // Read the status from the subthread.
     fn check_status(&self) -> bool{
-        let exit_value = Some(self.child.lock().unwrap().wait().unwrap());
-        match exit_value {
-            None => unreachable!(),
-            Some(ev) => {
-                let code = ev.code().unwrap();
-                debug!("Exit status for {} = {}", self.name, code);
-                return code == 0
-            }
-        }
+        debug!("Getting status for {}", self.name);
+        // try_recv() is nonblocking, so poll until it's readable.
+        let poll = Poll::new().unwrap();
+        poll.register(&self.child, mio::Token(0), Ready::readable(),
+                      PollOpt::level()).unwrap();
+        let mut events = Events::with_capacity(1);
+        poll.poll(&mut events, None).unwrap();
+        
+        let code = self.child.try_recv().unwrap();
+        debug!("Exit status for {} = {}", self.name, code);
+        return code == 0
     }
 }
 
