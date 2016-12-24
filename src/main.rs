@@ -49,12 +49,12 @@ impl Agent {
         // Create an poll instance
         let poll = Poll::new().unwrap();
         poll.register(&listener, SERVER, Ready::readable(),
-                      PollOpt::edge()).unwrap();
+                      PollOpt::level()).unwrap();
         let mut events = Events::with_capacity(1024);
 
         let (txf, rxf) = channel::channel::<i32>();
         poll.register(&rxf, FAILED, Ready::readable(),
-                      PollOpt::edge()).unwrap();
+                      PollOpt::level()).unwrap();
 
         let ccopy = Arc::new(Mutex::new(child));
         let ccopy2 = ccopy.clone(); // Gross!
