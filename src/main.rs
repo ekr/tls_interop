@@ -6,119 +6,17 @@ extern crate env_logger;
 extern crate rustc_serialize;
 use clap::{Arg, App};
 use mio::*;
-use mio::channel::Receiver;
-use mio::tcp::{TcpListener, TcpStream, Shutdown};
+use mio::tcp::Shutdown;
 use rustc_serialize::json;
 use std::io::prelude::*;
 use std::fs::File;
-use std::process::{Command, ExitStatus};
-use std::thread;
+mod agent;
+mod test_result;
+use agent::Agent;
+use test_result::TestResult;
 
 const CLIENT: Token = mio::Token(0);
 const SERVER: Token = mio::Token(1);
-const STATUS: Token = mio::Token(2);
-
-#[allow(dead_code)]
-struct Agent {
-    name : String,
-    path : String,
-    args : Vec<String>,
-    socket : TcpStream,
-    child: Receiver<i32>,
-    alive : bool,
-    exit_value : Option<ExitStatus>,
-}
-
-impl Agent {
-    fn new(name: &str, path: &String, args: Vec<String>) -> Result<Agent, i32> {
-        let addr = "127.0.0.1:0".parse().unwrap();
-        let listener = TcpListener::bind(&addr).unwrap();
-
-        // Start the subprocess.
-        let mut command = Command::new(path.to_owned());
-        for arg in args.iter() {
-            command.arg(arg);
-        }
-
-        command.arg("-port");
-        command.arg(listener.local_addr().unwrap().port().to_string());
-
-        let mut child = command.spawn().unwrap();
-
-        // Listen for connect
-        // Create an poll instance
-        let poll = Poll::new().unwrap();
-        poll.register(&listener, SERVER, Ready::readable(),
-                      PollOpt::level()).unwrap();
-        let mut events = Events::with_capacity(1024);
-
-        // This is gross, but we can't reregister channels.
-        // https://github.com/carllerche/mio/issues/506
-        let (txf, rxf) = channel::channel::<i32>();
-        let (txf2, rxf2) = channel::channel::<i32>();
-        
-        poll.register(&rxf, STATUS, Ready::readable(),
-                      PollOpt::level()).unwrap();
-
-        thread::spawn(move || {
-            let ecode = child.wait().expect("failed waiting for subprocess");
-            txf.send(match ecode.code() {
-                None => -1,
-                Some(e) => e
-            }).ok();
-            txf2.send(match ecode.code() {
-                None => -1,
-                Some(e) => e
-            }).ok();
-        });
-
-        poll.poll(&mut events, None).unwrap();
-        debug!("Poll finished!");
-        for event in events.iter() {
-            debug!("Event!");
-            match event.token(){
-                SERVER => {
-                    let sock = listener.accept();
-
-                    debug!("Accepted");
-                    return Ok(Agent {
-                        name: name.to_owned(),
-                        path: path.to_owned(),
-                        args: args,
-                        socket: sock.unwrap().0,
-                        child: rxf2,
-                        alive: true,
-                        exit_value: None,
-                    })
-                },
-                STATUS => {
-                    let err = rxf.try_recv().unwrap();
-                    info!("Failed {}", err);
-                    return Err(err);
-                },
-                _ => return Err(-1),
-            }
-        }
-        
-        debug!("Started {}", name);
-        unreachable!()
-    }
-
-    // Read the status from the subthread.
-    fn check_status(&self) -> TestResult {
-        debug!("Getting status for {}", self.name);
-        // try_recv() is nonblocking, so poll until it's readable.
-        let poll = Poll::new().unwrap();
-        poll.register(&self.child, STATUS, Ready::readable(),
-                      PollOpt::level()).unwrap();
-        let mut events = Events::with_capacity(1);
-        poll.poll(&mut events, None).unwrap();
-        
-        let code = self.child.try_recv().unwrap();
-        debug!("Exit status for {} = {}", self.name, code);
-        return TestResult::from_status(code);
-    }
-}
 
 fn copy_data(poll: &Poll, from: &mut Agent, to: &mut Agent) {
     let mut buf: [u8; 16384] = [0; 16384];
@@ -207,36 +105,6 @@ struct TestConfig {
     server_shim : String,
     rootdir : String,
 }
-
-enum TestResult {
-    OK,
-    Skipped,
-    Failed
-}
-
-impl TestResult {
-    fn from_status(status: i32) -> TestResult {
-        match status {
-            0 => TestResult::OK,
-            89 => TestResult::Skipped,
-            _ => TestResult::Failed
-        }
-    }
-
-    // Return a combined return status. If either side skipped, then
-    // we mark it skipped. Otherwise we return OK only if both sides
-    // reported OK.
-    fn merge(a: TestResult, b: TestResult) -> TestResult{
-        let res = (a, b);
-        match res {
-            (TestResult::Skipped, _) =>  TestResult::Skipped,
-            (_, TestResult::Skipped) =>  TestResult::Skipped,
-            (TestResult::Failed, _) =>  TestResult::Failed,
-            (_, TestResult::Failed) =>  TestResult::Failed,
-            (TestResult::OK, TestResult::OK) => TestResult::OK
-        }
-    }
-}    
 
 fn run_test_case(config: &TestConfig, case: &TestCase) -> TestResult {
     // Create the server args
