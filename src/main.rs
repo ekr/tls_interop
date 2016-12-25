@@ -106,6 +106,33 @@ struct TestConfig {
     rootdir : String,
 }
 
+struct Results {
+    ran : u32,
+    succeeded: u32,
+    failed: u32,
+    skipped: u32,
+}
+
+impl Results {
+    fn new() -> Results {
+        Results {
+            ran : 0,
+            succeeded :0,
+            failed : 0,
+            skipped : 0,
+        }
+    }
+
+    fn update(&mut self, case : &TestCase, result : TestResult) {
+        self.ran += 1;
+        match result {
+            TestResult::OK => self.succeeded += 1,
+            TestResult::Skipped => self.skipped += 1,
+            TestResult::Failed => self.failed +=1
+        }
+    }
+}
+    
 fn run_test_case(config: &TestConfig, case: &TestCase) -> TestResult {
     // Create the server args
     let mut server_args = vec![
@@ -191,20 +218,13 @@ fn main() {
     f.read_to_string(&mut s).expect("Could not read file to string");
     let cases : TestCases = json::decode(&s).unwrap();
 
-    let mut ran = 0;
-    let mut succeeded = 0;
-    let mut failed = 0;
-    let mut skipped = 0;
-
+    let mut results = Results::new();
     for c in cases.cases {
-        ran += 1;
-        match run_test_case(&config, &c) {
-            TestResult::OK => succeeded += 1,
-            TestResult::Skipped => skipped += 1,
-            TestResult::Failed => failed +=1
-        }
+        let r = run_test_case(&config, &c);
+        results.update(&c, r);
     }
 
     println!("Tests {}; Succeeded {}; Skipped {}, Failed {}",
-             ran, succeeded, skipped, failed);
+             results.ran, results.succeeded, results.skipped, results.failed);
+
 }
