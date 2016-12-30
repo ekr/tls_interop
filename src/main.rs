@@ -131,17 +131,6 @@ fn run_test_case(config: &TestConfig, case: &TestCase) -> TestResult {
     server_args.push(config.rootdir.clone() + &key_base + &String::from("_cert.pem"));
     server_args.push(String::from("-write-then-read"));
 
-    if let Some(ref server) = case.server {
-        match server.flags {
-            None => (),
-            Some (ref flags) => {
-                for f in flags {
-                    server_args.push(f.clone());
-                }
-            }
-        };
-    }
-
     let mut server = match Agent::new("server",
                                       &config.server_shim,
                                       &case.server,

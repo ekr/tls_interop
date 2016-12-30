@@ -21,6 +21,7 @@ pub struct Agent {
     exit_value : Option<ExitStatus>,
 }
 
+
 impl Agent {
     pub fn new(name: &str, path: &String, agent: &Option<TestCaseAgent>,
                args: Vec<String>) -> Result<Agent, i32> {
@@ -29,6 +30,23 @@ impl Agent {
 
         // Start the subprocess.
         let mut command = Command::new(path.to_owned());
+        // Process parameters.
+        if let &Some(ref a) = agent {
+            if let Some(ref min) = a.min_version {
+                command.arg("-min-version");
+                command.arg(min.to_string());
+            }
+            if let Some(ref min) = a.max_version {
+                command.arg("-max-version");
+                command.arg(min.to_string());
+            }
+            if let Some(ref flags) = a.flags {
+                for f in flags {
+                    command.arg(f);
+                }
+            }
+        }
+        
         // Add specific args.
         for arg in args.iter() {
             command.arg(arg);
@@ -37,7 +55,7 @@ impl Agent {
         // Add common args.
         command.arg("-port");
         command.arg(listener.local_addr().unwrap().port().to_string());
-
+        debug!("Executing command {:?}", &command);
         let mut child = command.spawn().unwrap();
         
         // Listen for connect
