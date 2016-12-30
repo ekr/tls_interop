@@ -11,9 +11,11 @@ use rustc_serialize::json;
 use std::io::prelude::*;
 use std::fs::File;
 mod agent;
+mod config;
 mod test_result;
 use agent::Agent;
 use test_result::TestResult;
+use config::{TestCase,TestCases};
 
 const CLIENT: Token = mio::Token(0);
 const SERVER: Token = mio::Token(1);
@@ -78,34 +80,14 @@ fn shuttle(client: &mut Agent, server: &mut Agent) {
     }
 }
 
-#[derive(RustcDecodable, RustcEncodable)]
-#[derive(Debug)]
-struct TestCaseAgent {
-    flags : Option<Vec<String>>,
-}
-
-#[derive(RustcDecodable, RustcEncodable)]
-#[derive(Debug)]
-struct TestCase {
-    name: String,
-    server_key : Option<String>,
-    versions : Option<Vec<String>>,
-    client : Option<TestCaseAgent>,
-    server : Option<TestCaseAgent>,
-}
-
-#[derive(RustcDecodable, RustcEncodable)]
-#[derive(Debug)]
-struct TestCases {
-    cases : Vec<TestCase>,
-}
-
-struct TestConfig {
+// The command line options passed to the runner.
+pub struct TestConfig {
     client_shim : String,
     server_shim : String,
     rootdir : String,
 }
 
+// The results of the entire test run.
 struct Results {
     ran : u32,
     succeeded: u32,
@@ -132,7 +114,7 @@ impl Results {
         }
     }
 }
-    
+
 fn run_test_case(config: &TestConfig, case: &TestCase) -> TestResult {
     // Create the server args
     let mut server_args = vec![
@@ -162,6 +144,7 @@ fn run_test_case(config: &TestConfig, case: &TestCase) -> TestResult {
 
     let mut server = match Agent::new("server",
                                       &config.server_shim,
+                                      &case.server,
                                       server_args) {
         Ok(a) => a,
         Err(e) => { return TestResult::from_status(e); }
@@ -169,6 +152,7 @@ fn run_test_case(config: &TestConfig, case: &TestCase) -> TestResult {
 
     let mut client = match Agent::new("client",
                                       &config.client_shim,
+                                      &case.client,
                                       vec![]) {
         Ok(a) => a,
         Err(e) => { return TestResult::from_status(e); }

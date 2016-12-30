@@ -5,6 +5,7 @@ use mio::tcp::{TcpListener, TcpStream};
 use std::process::{Command, ExitStatus};
 use std::thread;
 use test_result::TestResult;
+use config::*;
 
 const SERVER: Token = mio::Token(1);
 const STATUS: Token = mio::Token(2);
@@ -21,21 +22,24 @@ pub struct Agent {
 }
 
 impl Agent {
-    pub fn new(name: &str, path: &String, args: Vec<String>) -> Result<Agent, i32> {
+    pub fn new(name: &str, path: &String, agent: &Option<TestCaseAgent>,
+               args: Vec<String>) -> Result<Agent, i32> {
         let addr = "127.0.0.1:0".parse().unwrap();
         let listener = TcpListener::bind(&addr).unwrap();
 
         // Start the subprocess.
         let mut command = Command::new(path.to_owned());
+        // Add specific args.
         for arg in args.iter() {
             command.arg(arg);
         }
 
+        // Add common args.
         command.arg("-port");
         command.arg(listener.local_addr().unwrap().port().to_string());
 
         let mut child = command.spawn().unwrap();
-
+        
         // Listen for connect
         // Create an poll instance
         let poll = Poll::new().unwrap();
