@@ -109,8 +109,24 @@ impl Results {
         }
     }
 
-    fn update(&mut self, case : &TestCase, result : TestResult) {
+    fn case_name(case: &TestCase, index: Option<u32>) -> String {
+        let mut name = case.name.clone();
+
+        match index {
+            None => name
+            Some(x) {
+                name.push_str("/");
+                name.push_str(x.to_string());
+                name
+            }
+        }
+    }
+    
+    fn update(&mut self, case : &TestCase, index: Option<u32>, result : TestResult) {
         self.ran += 1;
+
+        info!("Test case {}", case_name(case, index));
+              
         match result {
             TestResult::OK => self.succeeded += 1,
             TestResult::Skipped => self.skipped += 1,
@@ -167,12 +183,11 @@ fn run_test_case(results: &mut Results,
                  extra_client_args : &Vec<String>,
                  extra_server_args : &Vec<String>) {
 
-    let r = run_test_case_inner(config, case, index, extra_client_args, extra_server_args);
-    results.update(case, r);
+    let r = run_test_case_inner(config, case, extra_client_args, extra_server_args);
+    results.update(case, index, r);
 }
 
 fn run_test_case_inner(config: &TestConfig, case: &TestCase,
-                       index : Option<i32>,
                        extra_client_args : &Vec<String>,
                  extra_server_args : &Vec<String>) -> TestResult {
     // Create the server args
