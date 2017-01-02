@@ -10,12 +10,16 @@ use mio::tcp::Shutdown;
 use rustc_serialize::json;
 use std::io::prelude::*;
 use std::fs::File;
+
 mod agent;
 mod config;
 mod test_result;
+mod flatten;
+mod tests;
 use agent::Agent;
 use test_result::TestResult;
-use config::{TestCase,TestCases};
+use config::{TestCase,TestCases,TestCaseParams};
+use flatten::flatten;
 
 const CLIENT: Token = mio::Token(0);
 const SERVER: Token = mio::Token(1);
@@ -114,6 +118,29 @@ impl Results {
         }
     }
 }
+           
+fn make_params(params : &Option<TestCaseParams>) -> Vec<Vec<String>> {
+    let mut mat = vec![];
+
+    if let &Some(ref p) = params {
+        if let Some(ref versions) = p.versions {
+            let mut alist = vec![];
+            for ver in versions {
+                let mut args = vec![];
+                
+                args.push(String::from("-min-version"));
+                args.push(ver.to_string());
+                args.push(String::from("-max-version"));
+                args.push(ver.to_string());
+
+                alist.push(args);
+            }
+            mat.push(alist)            
+        }
+    }
+
+    flatten(&mat)
+}
 
 fn run_test_case(config: &TestConfig, case: &TestCase) -> TestResult {
     // Create the server args
@@ -199,5 +226,4 @@ fn main() {
 
     println!("Tests {}; Succeeded {}; Skipped {}, Failed {}",
              results.ran, results.succeeded, results.skipped, results.failed);
-
 }

@@ -12,7 +12,7 @@
             "name" : "Simple-Connect"
         },
         {
-            "name" : "Connect-1.2"
+            "name" : "Connect-1.2",
             "client" : {
                 "min_version" : 771,
                 "max_version" : 771
