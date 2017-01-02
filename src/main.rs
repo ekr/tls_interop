@@ -113,11 +113,10 @@ impl Results {
         let mut name = case.name.clone();
 
         match index {
-            None => name
-            Some(x) {
+            None => name,
+            Some(x) => {
                 name.push_str("/");
-                name.push_str(x.to_string());
-                name
+                name + &x.to_string()
             }
         }
     }
@@ -125,7 +124,7 @@ impl Results {
     fn update(&mut self, case : &TestCase, index: Option<u32>, result : TestResult) {
         self.ran += 1;
 
-        info!("Test case {}", case_name(case, index));
+        info!("Test case {}", Results::case_name(case, index));
               
         match result {
             TestResult::OK => self.succeeded += 1,
@@ -166,7 +165,7 @@ fn run_test_case_meta(results: &mut Results,
     } else {
         let client_args = make_params(&case.client_params);
         let server_args = make_params(&case.server_params);
-        let mut index = 0;
+        let mut index :u32 = 0;
         
         for c in &client_args {
             for s in &server_args {
@@ -179,7 +178,7 @@ fn run_test_case_meta(results: &mut Results,
 
 fn run_test_case(results: &mut Results,
                  config: &TestConfig, case: &TestCase,
-                 index : Option<i32>,
+                 index : Option<u32>,
                  extra_client_args : &Vec<String>,
                  extra_server_args : &Vec<String>) {
 
