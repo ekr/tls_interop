@@ -18,7 +18,7 @@ mod flatten;
 mod tests;
 use agent::Agent;
 use test_result::TestResult;
-use config::{TestCase,TestCases,TestCaseParams};
+use config::{TestCase, TestCases, TestCaseParams};
 use flatten::flatten;
 
 const CLIENT: Token = mio::Token(0);
@@ -32,8 +32,8 @@ fn copy_data(poll: &Poll, from: &mut Agent, to: &mut Agent) {
         Err(_) => {
             debug!("Error on {}", from.name);
             0
-        },
-        Ok(size) => size
+        }
+        Ok(size) => size,
     };
     if size == 0 {
         debug!("End of file on {}", from.name);
@@ -49,7 +49,7 @@ fn copy_data(poll: &Poll, from: &mut Agent, to: &mut Agent) {
     match rv {
         Err(_) => {
             panic!("write failed");
-        },
+        }
         _ => {
             debug!("Write succeeded");
         }
@@ -60,10 +60,10 @@ fn shuttle(client: &mut Agent, server: &mut Agent) {
     // Listen for connect
     // Create an poll instance
     let poll = Poll::new().unwrap();
-    poll.register(&client.socket, CLIENT, Ready::readable(),
-                  PollOpt::edge()).unwrap();
-    poll.register(&server.socket, SERVER, Ready::readable(),
-                  PollOpt::edge()).unwrap();
+    poll.register(&client.socket, CLIENT, Ready::readable(), PollOpt::edge())
+        .unwrap();
+    poll.register(&server.socket, SERVER, Ready::readable(), PollOpt::edge())
+        .unwrap();
     let mut events = Events::with_capacity(1024);
 
     while client.alive || server.alive {
@@ -73,12 +73,12 @@ fn shuttle(client: &mut Agent, server: &mut Agent) {
                 CLIENT => {
                     debug!("Client ready");
                     copy_data(&poll, client, server);
-                },
+                }
                 SERVER => {
                     debug!("Server ready");
                     copy_data(&poll, server, client);
-                },
-                _ => unreachable!()
+                }
+                _ => unreachable!(),
             }
         }
     }
@@ -86,14 +86,14 @@ fn shuttle(client: &mut Agent, server: &mut Agent) {
 
 // The command line options passed to the runner.
 pub struct TestConfig {
-    client_shim : String,
-    server_shim : String,
-    rootdir : String,
+    client_shim: String,
+    server_shim: String,
+    rootdir: String,
 }
 
 // The results of the entire test run.
 struct Results {
-    ran : u32,
+    ran: u32,
     succeeded: u32,
     failed: u32,
     skipped: u32,
@@ -102,10 +102,10 @@ struct Results {
 impl Results {
     fn new() -> Results {
         Results {
-            ran : 0,
-            succeeded :0,
-            failed : 0,
-            skipped : 0,
+            ran: 0,
+            succeeded: 0,
+            failed: 0,
+            skipped: 0,
         }
     }
 
@@ -120,21 +120,21 @@ impl Results {
             }
         }
     }
-    
-    fn update(&mut self, case : &TestCase, index: Option<u32>, result : TestResult) {
+
+    fn update(&mut self, case: &TestCase, index: Option<u32>, result: TestResult) {
         self.ran += 1;
 
         info!("Test case {}", Results::case_name(case, index));
-              
+
         match result {
             TestResult::OK => self.succeeded += 1,
             TestResult::Skipped => self.skipped += 1,
-            TestResult::Failed => self.failed +=1
+            TestResult::Failed => self.failed += 1,
         }
     }
 }
-           
-fn make_params(params : &Option<TestCaseParams>) -> Vec<Vec<String>> {
+
+fn make_params(params: &Option<TestCaseParams>) -> Vec<Vec<String>> {
     let mut mat = vec![];
 
     if let &Some(ref p) = params {
@@ -142,7 +142,7 @@ fn make_params(params : &Option<TestCaseParams>) -> Vec<Vec<String>> {
             let mut alist = vec![];
             for ver in versions {
                 let mut args = vec![];
-                
+
                 args.push(String::from("-min-version"));
                 args.push(ver.to_string());
                 args.push(String::from("-max-version"));
@@ -150,23 +150,22 @@ fn make_params(params : &Option<TestCaseParams>) -> Vec<Vec<String>> {
 
                 alist.push(args);
             }
-            mat.push(alist)            
+            mat.push(alist)
         }
     }
 
     flatten(&mat)
 }
 
-fn run_test_case_meta(results: &mut Results,
-                      config: &TestConfig, case: &TestCase) {
+fn run_test_case_meta(results: &mut Results, config: &TestConfig, case: &TestCase) {
     if !case.client_params.is_some() && !case.server_params.is_some() {
         let dummy = vec![];
         run_test_case(results, config, case, None, &dummy, &dummy);
     } else {
         let client_args = make_params(&case.client_params);
         let server_args = make_params(&case.server_params);
-        let mut index :u32 = 0;
-        
+        let mut index: u32 = 0;
+
         for c in &client_args {
             for s in &server_args {
                 run_test_case(results, config, case, Some(index), &c, &s);
@@ -177,52 +176,52 @@ fn run_test_case_meta(results: &mut Results,
 }
 
 fn run_test_case(results: &mut Results,
-                 config: &TestConfig, case: &TestCase,
-                 index : Option<u32>,
-                 extra_client_args : &Vec<String>,
-                 extra_server_args : &Vec<String>) {
+                 config: &TestConfig,
+                 case: &TestCase,
+                 index: Option<u32>,
+                 extra_client_args: &Vec<String>,
+                 extra_server_args: &Vec<String>) {
 
     let r = run_test_case_inner(config, case, extra_client_args, extra_server_args);
     results.update(case, index, r);
 }
 
-fn run_test_case_inner(config: &TestConfig, case: &TestCase,
-                       extra_client_args : &Vec<String>,
-                 extra_server_args : &Vec<String>) -> TestResult {
+fn run_test_case_inner(config: &TestConfig,
+                       case: &TestCase,
+                       extra_client_args: &Vec<String>,
+                       extra_server_args: &Vec<String>)
+                       -> TestResult {
     // Create the server args
     let mut server_args = extra_server_args.clone();
     server_args.push(String::from("-server"));
-    let key_base =
-        match case.server_key {
-            None => String::from("rsa_1024"),
-            Some(ref key) => key.clone()
-        };
+    let key_base = match case.server_key {
+        None => String::from("rsa_1024"),
+        Some(ref key) => key.clone(),
+    };
     server_args.push(String::from("-key-file"));
     server_args.push(config.rootdir.clone() + &key_base + &String::from("_key.pem"));
     server_args.push(String::from("-cert-file"));
     server_args.push(config.rootdir.clone() + &key_base + &String::from("_cert.pem"));
     server_args.push(String::from("-write-then-read"));
 
-    let mut server = match Agent::new("server",
-                                      &config.server_shim,
-                                      &case.server,
-                                      server_args) {
+    let mut server = match Agent::new("server", &config.server_shim, &case.server, server_args) {
         Ok(a) => a,
-        Err(e) => { return TestResult::from_status(e); }
+        Err(e) => {
+            return TestResult::from_status(e);
+        }
     };
 
     let client_args = extra_client_args.clone();
-    let mut client = match Agent::new("client",
-                                      &config.client_shim,
-                                      &case.client,
-                                      client_args) {
+    let mut client = match Agent::new("client", &config.client_shim, &case.client, client_args) {
         Ok(a) => a,
-        Err(e) => { return TestResult::from_status(e); }
+        Err(e) => {
+            return TestResult::from_status(e);
+        }
     };
 
     shuttle(&mut client, &mut server);
 
-    return TestResult::merge(client.check_status(), server.check_status())
+    return TestResult::merge(client.check_status(), server.check_status());
 }
 
 fn main() {
@@ -231,37 +230,37 @@ fn main() {
     let matches = App::new("TLS interop tests")
         .version("0.0")
         .arg(Arg::with_name("client")
-             .long("client")
-             .help("The shim to use as the client")
-             .takes_value(true)
-             .required(true))
+            .long("client")
+            .help("The shim to use as the client")
+            .takes_value(true)
+            .required(true))
         .arg(Arg::with_name("server")
-             .long("server")
-             .help("The shim to use as the server")
-             .takes_value(true)
-             .required(true))
+            .long("server")
+            .help("The shim to use as the server")
+            .takes_value(true)
+            .required(true))
         .arg(Arg::with_name("rootdir")
-             .long("rootdir")
-             .help("The path where the working files are")
-             .takes_value(true)
-             .required(true))
+            .long("rootdir")
+            .help("The path where the working files are")
+            .takes_value(true)
+            .required(true))
         .arg(Arg::with_name("cases")
-             .long("test-cases")
-             .help("The test cases file to run")
-             .takes_value(true)
-             .required(true))
+            .long("test-cases")
+            .help("The test cases file to run")
+            .takes_value(true)
+            .required(true))
         .get_matches();
 
     let config = TestConfig {
-        client_shim : String::from(matches.value_of("client").unwrap()),
-        server_shim : String::from(matches.value_of("server").unwrap()),
-        rootdir : String::from(matches.value_of("rootdir").unwrap()),
+        client_shim: String::from(matches.value_of("client").unwrap()),
+        server_shim: String::from(matches.value_of("server").unwrap()),
+        rootdir: String::from(matches.value_of("rootdir").unwrap()),
     };
 
     let mut f = File::open(matches.value_of("cases").unwrap()).unwrap();
     let mut s = String::from("");
     f.read_to_string(&mut s).expect("Could not read file to string");
-    let cases : TestCases = json::decode(&s).unwrap();
+    let cases: TestCases = json::decode(&s).unwrap();
 
     let mut results = Results::new();
     for c in cases.cases {
@@ -269,5 +268,8 @@ fn main() {
     }
 
     println!("Tests {}; Succeeded {}; Skipped {}, Failed {}",
-             results.ran, results.succeeded, results.skipped, results.failed);
+             results.ran,
+             results.succeeded,
+             results.skipped,
+             results.failed);
 }

@@ -12,19 +12,22 @@ const STATUS: Token = mio::Token(2);
 
 #[allow(dead_code)]
 pub struct Agent {
-    pub name : String,
-    path : String,
-    args : Vec<String>,
-    pub socket : TcpStream,
+    pub name: String,
+    path: String,
+    args: Vec<String>,
+    pub socket: TcpStream,
     child: Receiver<i32>,
-    pub alive : bool,
-    exit_value : Option<ExitStatus>,
+    pub alive: bool,
+    exit_value: Option<ExitStatus>,
 }
 
 
 impl Agent {
-    pub fn new(name: &str, path: &String, agent: &Option<TestCaseAgent>,
-               args: Vec<String>) -> Result<Agent, i32> {
+    pub fn new(name: &str,
+               path: &String,
+               agent: &Option<TestCaseAgent>,
+               args: Vec<String>)
+               -> Result<Agent, i32> {
         let addr = "127.0.0.1:0".parse().unwrap();
         let listener = TcpListener::bind(&addr).unwrap();
 
@@ -46,7 +49,7 @@ impl Agent {
                 }
             }
         }
-        
+
         // Add specific args.
         for arg in args.iter() {
             command.arg(arg);
@@ -57,39 +60,41 @@ impl Agent {
         command.arg(listener.local_addr().unwrap().port().to_string());
         debug!("Executing command {:?}", &command);
         let mut child = command.spawn().unwrap();
-        
+
         // Listen for connect
         // Create an poll instance
         let poll = Poll::new().unwrap();
-        poll.register(&listener, SERVER, Ready::readable(),
-                      PollOpt::level()).unwrap();
+        poll.register(&listener, SERVER, Ready::readable(), PollOpt::level())
+            .unwrap();
         let mut events = Events::with_capacity(1024);
 
         // This is gross, but we can't reregister channels.
         // https://github.com/carllerche/mio/issues/506
         let (txf, rxf) = channel::channel::<i32>();
         let (txf2, rxf2) = channel::channel::<i32>();
-        
-        poll.register(&rxf, STATUS, Ready::readable(),
-                      PollOpt::level()).unwrap();
+
+        poll.register(&rxf, STATUS, Ready::readable(), PollOpt::level())
+            .unwrap();
 
         thread::spawn(move || {
             let ecode = child.wait().expect("failed waiting for subprocess");
             txf.send(match ecode.code() {
-                None => -1,
-                Some(e) => e
-            }).ok();
+                    None => -1,
+                    Some(e) => e,
+                })
+                .ok();
             txf2.send(match ecode.code() {
-                None => -1,
-                Some(e) => e
-            }).ok();
+                    None => -1,
+                    Some(e) => e,
+                })
+                .ok();
         });
 
         poll.poll(&mut events, None).unwrap();
         debug!("Poll finished!");
         for event in events.iter() {
             debug!("Event!");
-            match event.token(){
+            match event.token() {
                 SERVER => {
                     let sock = listener.accept();
 
@@ -102,17 +107,17 @@ impl Agent {
                         child: rxf2,
                         alive: true,
                         exit_value: None,
-                    })
-                },
+                    });
+                }
                 STATUS => {
                     let err = rxf.try_recv().unwrap();
                     info!("Failed {}", err);
                     return Err(err);
-                },
+                }
                 _ => return Err(-1),
             }
         }
-        
+
         debug!("Started {}", name);
         unreachable!()
     }
@@ -122,11 +127,11 @@ impl Agent {
         debug!("Getting status for {}", self.name);
         // try_recv() is nonblocking, so poll until it's readable.
         let poll = Poll::new().unwrap();
-        poll.register(&self.child, STATUS, Ready::readable(),
-                      PollOpt::level()).unwrap();
+        poll.register(&self.child, STATUS, Ready::readable(), PollOpt::level())
+            .unwrap();
         let mut events = Events::with_capacity(1);
         poll.poll(&mut events, None).unwrap();
-        
+
         let code = self.child.try_recv().unwrap();
         debug!("Exit status for {} = {}", self.name, code);
         return TestResult::from_status(code);
