@@ -142,11 +142,33 @@ fn make_params(params : &Option<TestCaseParams>) -> Vec<Vec<String>> {
     flatten(&mat)
 }
 
-fn run_test_case(config: &TestConfig, case: &TestCase) -> TestResult {
+fn run_test_case_meta(results: &mut Results,
+                      config: &TestConfig, case: &TestCase) {
+    if !case.client_params.is_some() && !case.server_params.is_some() {
+        let dummy = vec![];
+        run_test_case(results, config, case, None, &dummy, &dummy);
+    } else {
+        //
+    }
+}
+
+fn run_test_case(results: &mut Results,
+                 config: &TestConfig, case: &TestCase,
+                 index : Option<i32>,
+                 extra_client_args : &Vec<String>,
+                 extra_server_args : &Vec<String>) {
+
+    let r = run_test_case_inner(config, case, index, extra_client_args, extra_server_args);
+    results.update(case, r);
+}
+
+fn run_test_case_inner(config: &TestConfig, case: &TestCase,
+                       index : Option<i32>,
+                       extra_client_args : &Vec<String>,
+                 extra_server_args : &Vec<String>) -> TestResult {
     // Create the server args
-    let mut server_args = vec![
-        String::from("-server")
-    ];
+    let mut server_args = extra_server_args.clone();
+    server_args.push(String::from("-server"));
     let key_base =
         match case.server_key {
             None => String::from("rsa_1024"),
@@ -166,19 +188,19 @@ fn run_test_case(config: &TestConfig, case: &TestCase) -> TestResult {
         Err(e) => { return TestResult::from_status(e); }
     };
 
+    let mut client_args = extra_client_args.clone();
     let mut client = match Agent::new("client",
                                       &config.client_shim,
                                       &case.client,
-                                      vec![]) {
+                                      client_args) {
         Ok(a) => a,
         Err(e) => { return TestResult::from_status(e); }
     };
 
     shuttle(&mut client, &mut server);
 
-    return TestResult::merge(client.check_status(), server.check_status());
+    return TestResult::merge(client.check_status(), server.check_status())
 }
-
 
 fn main() {
     env_logger::init().expect("Could not init logging");
@@ -220,8 +242,7 @@ fn main() {
 
     let mut results = Results::new();
     for c in cases.cases {
-        let r = run_test_case(&config, &c);
-        results.update(&c, r);
+        run_test_case_meta(&mut results, &config, &c);
     }
 
     println!("Tests {}; Succeeded {}; Skipped {}, Failed {}",
