@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter, Result};
+
 pub enum TestResult {
     OK,
     Skipped,
@@ -24,6 +26,16 @@ impl TestResult {
             (TestResult::Failed, _) => TestResult::Failed,
             (_, TestResult::Failed) => TestResult::Failed,
             (TestResult::OK, TestResult::OK) => TestResult::OK,
+        }
+    }
+}
+
+impl Display for TestResult {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        match self {
+            &TestResult::OK => write!(f, "SUCCEEDED"),
+            &TestResult::Skipped => write!(f, "SKIPPED"),
+            &TestResult::Failed => write!(f, "FAILED")
         }
     }
 }

@@ -124,12 +124,15 @@ impl Results {
     fn update(&mut self, case: &TestCase, index: Option<u32>, result: TestResult) {
         self.ran += 1;
 
-        info!("Test case {}", Results::case_name(case, index));
+        info!("{}: {}", result.to_string(), Results::case_name(case, index));
 
         match result {
             TestResult::OK => self.succeeded += 1,
             TestResult::Skipped => self.skipped += 1,
-            TestResult::Failed => self.failed += 1,
+            TestResult::Failed => {
+                println!("FAILED: {}", Results::case_name(case, index));
+                self.failed += 1
+            }
         }
     }
 }
