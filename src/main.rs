@@ -10,7 +10,7 @@ use mio::tcp::Shutdown;
 use rustc_serialize::json;
 use std::io::prelude::*;
 use std::fs::File;
-
+use std::process::exit;
 mod agent;
 mod config;
 mod test_result;
@@ -272,4 +272,10 @@ fn main() {
              results.succeeded,
              results.skipped,
              results.failed);
+
+    if results.failed != 0 {
+        exit(1);
+    }
+
+    exit(0);
 }
