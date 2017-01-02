@@ -42,7 +42,7 @@ fn copy_data(poll: &Poll, from: &mut Agent, to: &mut Agent) {
         from.alive = false;
         return;
     }
-    debug!("Buf {} ", size);
+    debug!("Read {} from {} ", size, from.name);
 
     let b2 = &b[0..size];
     let rv = to.socket.write_all(b2);
@@ -60,22 +60,22 @@ fn shuttle(client: &mut Agent, server: &mut Agent) {
     // Listen for connect
     // Create an poll instance
     let poll = Poll::new().unwrap();
-    poll.register(&client.socket, CLIENT, Ready::readable(), PollOpt::edge())
+    poll.register(&client.socket, CLIENT, Ready::readable(), PollOpt::level())
         .unwrap();
-    poll.register(&server.socket, SERVER, Ready::readable(), PollOpt::edge())
+    poll.register(&server.socket, SERVER, Ready::readable(), PollOpt::level())
         .unwrap();
     let mut events = Events::with_capacity(1024);
 
     while client.alive || server.alive {
+        debug!("Poll");
+        
         poll.poll(&mut events, None).unwrap();
         for event in events.iter() {
             match event.token() {
                 CLIENT => {
-                    debug!("Client ready");
                     copy_data(&poll, client, server);
                 }
                 SERVER => {
-                    debug!("Server ready");
                     copy_data(&poll, server, client);
                 }
                 _ => unreachable!(),
