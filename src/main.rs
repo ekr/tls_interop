@@ -148,7 +148,16 @@ fn run_test_case_meta(results: &mut Results,
         let dummy = vec![];
         run_test_case(results, config, case, None, &dummy, &dummy);
     } else {
-        //
+        let client_args = make_params(&case.client_params);
+        let server_args = make_params(&case.server_params);
+        let mut index = 0;
+        
+        for c in &client_args {
+            for s in &server_args {
+                run_test_case(results, config, case, Some(index), &c, &s);
+                index += 1;
+            }
+        }
     }
 }
 
@@ -188,7 +197,7 @@ fn run_test_case_inner(config: &TestConfig, case: &TestCase,
         Err(e) => { return TestResult::from_status(e); }
     };
 
-    let mut client_args = extra_client_args.clone();
+    let client_args = extra_client_args.clone();
     let mut client = match Agent::new("client",
                                       &config.client_shim,
                                       &case.client,

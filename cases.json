@@ -12,10 +12,13 @@
             "name" : "Simple-Connect"
         },
         {
-            "name" : "Connect-1.2",
-            "client" : {
-                "min_version" : 771,
-                "max_version" : 771
+            "name" : "Connect-Versions",
+            "client_params" : {
+                "versions" : [ 770, 771, 772]
+            },
+            "server" : {
+                "min_version" : 770,
+                "max_version" : 772
             }
         }
     ]
