@@ -78,16 +78,8 @@ impl Agent {
 
         thread::spawn(move || {
             let ecode = child.wait().expect("failed waiting for subprocess");
-            txf.send(match ecode.code() {
-                    None => -1,
-                    Some(e) => e,
-                })
-                .ok();
-            txf2.send(match ecode.code() {
-                    None => -1,
-                    Some(e) => e,
-                })
-                .ok();
+            txf.send(ecode.code().unwrap_or(-1)).ok();
+            txf2.send(ecode.code().unwrap_or(-1)).ok();
         });
 
         poll.poll(&mut events, None).unwrap();
@@ -118,7 +110,6 @@ impl Agent {
             }
         }
 
-        debug!("Started {}", name);
         unreachable!()
     }
 

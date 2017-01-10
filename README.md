@@ -18,7 +18,7 @@ tls_interop --client [shim-client] --server [shim-server] --rootdir=[path-to-key
 For instance:
 
 ```
-tls_interop --client $(NSS_ROOT)/dist/Darwin15.6.0_cc_64_DBG.OBJ/bin/nss_bogo_shim --server $(NSS_ROOT)/dist/Darwin15.6.0_cc_64_DBG.OBJ/bin/nss_bogo_shim --rootdir=$(BORINGSSL_ROOT)/ssl/test/runner/ --test-cases cases.json
+tls_interop --client ${NSS_ROOT}/dist/Darwin15.6.0_cc_64_DBG.OBJ/bin/nss_bogo_shim --server ${NSS_ROOT}/dist/Darwin15.6.0_cc_64_DBG.OBJ/bin/nss_bogo_shim --rootdir=${BORINGSSL_ROOT}/ssl/test/runner/ --test-cases cases.json
 ```
 
 To swap client and server, you need to run it twice.

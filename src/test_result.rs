@@ -19,8 +19,7 @@ impl TestResult {
     // we mark it skipped. Otherwise we return OK only if both sides
     // reported OK.
     pub fn merge(a: TestResult, b: TestResult) -> TestResult {
-        let res = (a, b);
-        match res {
+        match (a, b) {
             (TestResult::Skipped, _) => TestResult::Skipped,
             (_, TestResult::Skipped) => TestResult::Skipped,
             (TestResult::Failed, _) => TestResult::Failed,

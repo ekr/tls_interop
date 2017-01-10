@@ -28,13 +28,10 @@ fn copy_data(poll: &Poll, from: &mut Agent, to: &mut Agent) {
     let mut buf: [u8; 16384] = [0; 16384];
     let mut b = &mut buf[..];
     let rv = from.socket.read(b);
-    let size = match rv {
-        Err(_) => {
-            debug!("Error on {}", from.name);
-            0
-        }
-        Ok(size) => size,
-    };
+    let size = rv.unwrap_or_else(|e| {
+        debug!("Error {} on {}", e, from.name);
+        0
+    });
     if size == 0 {
         debug!("End of file on {}", from.name);
         poll.deregister(&from.socket).expect("Could not deregister socket");
@@ -58,7 +55,7 @@ fn copy_data(poll: &Poll, from: &mut Agent, to: &mut Agent) {
 
 fn shuttle(client: &mut Agent, server: &mut Agent) {
     // Listen for connect
-    // Create an poll instance
+    // Create a poll instance
     let poll = Poll::new().unwrap();
     poll.register(&client.socket, CLIENT, Ready::readable(), PollOpt::level())
         .unwrap();
@@ -68,7 +65,7 @@ fn shuttle(client: &mut Agent, server: &mut Agent) {
 
     while client.alive || server.alive {
         debug!("Poll");
-        
+
         poll.poll(&mut events, None).unwrap();
         for event in events.iter() {
             match event.token() {
@@ -171,7 +168,7 @@ fn run_test_case_meta(results: &mut Results, config: &TestConfig, case: &TestCas
 
         for c in &client_args {
             for s in &server_args {
-                run_test_case(results, config, case, Some(index), &c, &s);
+                run_test_case(results, config, case, Some(index), c, s);
                 index += 1;
             }
         }
