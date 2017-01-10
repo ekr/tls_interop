@@ -8,18 +8,16 @@ use clap::{Arg, App};
 use mio::*;
 use mio::tcp::Shutdown;
 use rustc_serialize::json;
+use std::iter::FromIterator;
 use std::io::prelude::*;
 use std::fs::File;
 use std::process::exit;
 mod agent;
 mod config;
 mod test_result;
-mod flatten;
-mod tests;
 use agent::Agent;
 use test_result::TestResult;
 use config::{TestCase, TestCases, TestCaseParams};
-use flatten::flatten;
 
 const CLIENT: Token = mio::Token(0);
 const SERVER: Token = mio::Token(1);
@@ -135,26 +133,18 @@ impl Results {
 }
 
 fn make_params(params: &Option<TestCaseParams>) -> Vec<Vec<String>> {
-    let mut mat = vec![];
-
-    if let &Some(ref p) = params {
-        if let Some(ref versions) = p.versions {
-            let mut alist = vec![];
-            for ver in versions {
-                let mut args = vec![];
-
-                args.push(String::from("-min-version"));
-                args.push(ver.to_string());
-                args.push(String::from("-max-version"));
-                args.push(ver.to_string());
-
-                alist.push(args);
-            }
-            mat.push(alist)
-        }
-    }
-
-    flatten(&mat)
+    params.as_ref().and_then(|ref p| {
+        p.versions.as_ref().map(|versions| {
+            Vec::from_iter(versions.iter().map(|ver| {
+                vec![
+                    String::from("-min-version"),
+                    ver.to_string(),
+                    String::from("-max-version"),
+                    ver.to_string()
+                ]
+            }))
+        })
+    }).unwrap_or(vec![vec![]])
 }
 
 fn run_test_case_meta(results: &mut Results, config: &TestConfig, case: &TestCase) {
